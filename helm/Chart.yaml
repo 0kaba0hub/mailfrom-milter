@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mailfrom
+description: Postfix milter — From-header / envelope-from domain alignment check
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
