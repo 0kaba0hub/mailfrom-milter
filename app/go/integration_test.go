@@ -53,7 +53,6 @@ func startTestServer(t *testing.T, action, rejectCode string) string {
 // Log capture
 // ---------------------------------------------------------------------------
 
-// captureLog redirects slog to a buffer for the duration of the test.
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	buf := &bytes.Buffer{}
@@ -64,7 +63,6 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return buf
 }
 
-// lastLogEntry returns the last JSON log line as a map.
 func lastLogEntry(buf *bytes.Buffer) map[string]string {
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -101,15 +99,13 @@ func assertNoLog(t *testing.T, buf *bytes.Buffer) {
 // Milter client helper
 // ---------------------------------------------------------------------------
 
-// result holds the outcome of a full milter conversation.
 type result struct {
-	mailAct    *milter.Action   // action returned at MAIL FROM stage (if not Continue)
-	eohAct     *milter.Action   // action returned at EOH stage (if not Continue)
+	mailAct    *milter.Action
+	eohAct     *milter.Action
 	modifyActs []milter.ModifyAction
-	finalAct   *milter.Action // action returned at EOB (Body)
+	finalAct   *milter.Action
 }
 
-// effectiveAction returns the first non-Continue action in order: MAIL FROM → EOH → final.
 func (r *result) effectiveAction() *milter.Action {
 	if r.mailAct != nil && r.mailAct.Code != milter.ActContinue {
 		return r.mailAct
@@ -120,8 +116,6 @@ func (r *result) effectiveAction() *milter.Action {
 	return r.finalAct
 }
 
-// sendMessage drives a full milter conversation.
-// authUser="" means unauthenticated session.
 func sendMessage(t *testing.T, addr, authUser, envelopeFrom, fromHeader string) result {
 	t.Helper()
 
@@ -143,10 +137,10 @@ func sendMessage(t *testing.T, addr, authUser, envelopeFrom, fromHeader string) 
 	if act, err := sess.Helo("localhost"); err != nil || act.Code != milter.ActContinue {
 		t.Fatalf("helo: err=%v act=%v", err, act)
 	}
-
 	if err := sess.Macros(milter.CodeMail, "{auth_authen}", authUser, "{mail_addr}", envelopeFrom); err != nil {
 		t.Fatalf("macros mail: %v", err)
 	}
+
 	mailAct, err := sess.Mail(envelopeFrom, nil)
 	if err != nil {
 		t.Fatalf("mail: %v", err)
@@ -194,298 +188,285 @@ func assertHeader(t *testing.T, acts []milter.ModifyAction, name, wantValue stri
 // action: reject
 // ---------------------------------------------------------------------------
 
-func TestIntegration_Reject_Unauthenticated(t *testing.T) {
-	addr := startTestServer(t, actionReject, "421")
-	buf := captureLog(t)
+func TestAction_Reject(t *testing.T) {
+	t.Run("unauthenticated session passes through without inspection", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
+		r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-	assertNoLog(t, buf)
-}
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		assertNoLog(t, buf)
+	})
 
-func TestIntegration_Reject_CheckAuthFail(t *testing.T) {
-	// authUser domain ≠ envelopeFrom domain → reject at MAIL FROM with MFC010001
-	addr := startTestServer(t, actionReject, "421")
-	buf := captureLog(t)
+	t.Run("auth domain mismatch → reject 421 MFC010001 at MAIL FROM", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "sender@other.com")
+		r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "sender@other.com")
 
-	act := r.effectiveAction()
-	if act.Code != milter.ActReplyCode {
-		t.Fatalf("got %v, want ReplyCode", act.Code)
-	}
-	if act.SMTPCode != 421 {
-		t.Errorf("SMTP code %d, want 421", act.SMTPCode)
-	}
-	if !strings.Contains(act.SMTPText, "MFC010001") {
-		t.Errorf("expected MFC010001 in response, got %q", act.SMTPText)
-	}
+		act := r.effectiveAction()
+		if act.Code != milter.ActReplyCode {
+			t.Fatalf("got %v, want ReplyCode", act.Code)
+		}
+		if act.SMTPCode != 421 {
+			t.Errorf("SMTP code %d, want 421", act.SMTPCode)
+		}
+		if !strings.Contains(act.SMTPText, "MFC010001") {
+			t.Errorf("expected MFC010001 in response, got %q", act.SMTPText)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "fail")
+		assertLog(t, entry, "return_code", "reject")
+	})
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "fail")
-	assertLog(t, entry, "return_code", "reject")
-}
+	t.Run("spoofed From header → reject 421 MFC010002 at EOH", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		buf := captureLog(t)
 
-func TestIntegration_Reject_CheckDataFail(t *testing.T) {
-	// authUser=envelope, but From: header has different domain → reject at EOH with MFC010002
-	addr := startTestServer(t, actionReject, "421")
-	buf := captureLog(t)
+		r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
 
-	r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
+		act := r.effectiveAction()
+		if act.Code != milter.ActReplyCode {
+			t.Fatalf("got %v, want ReplyCode", act.Code)
+		}
+		if act.SMTPCode != 421 {
+			t.Errorf("SMTP code %d, want 421", act.SMTPCode)
+		}
+		if !strings.Contains(act.SMTPText, "MFC010002") {
+			t.Errorf("expected MFC010002 in response, got %q", act.SMTPText)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "fail")
+		assertLog(t, entry, "return_code", "reject")
+	})
 
-	act := r.effectiveAction()
-	if act.Code != milter.ActReplyCode {
-		t.Fatalf("got %v, want ReplyCode", act.Code)
-	}
-	if act.SMTPCode != 421 {
-		t.Errorf("SMTP code %d, want 421", act.SMTPCode)
-	}
-	if !strings.Contains(act.SMTPText, "MFC010002") {
-		t.Errorf("expected MFC010002 in response, got %q", act.SMTPText)
-	}
+	t.Run("all checks pass → accept and log", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		buf := captureLog(t)
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "fail")
-	assertLog(t, entry, "return_code", "reject")
-}
+		r := sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
 
-func TestIntegration_Reject_AllPass(t *testing.T) {
-	addr := startTestServer(t, actionReject, "421")
-	buf := captureLog(t)
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "pass")
+		assertLog(t, entry, "return_code", "accept")
+	})
 
-	r := sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
+	t.Run("REJECT_CODE=550 → permanent reject 550", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "550")
+		buf := captureLog(t)
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
+		r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "pass")
-	assertLog(t, entry, "return_code", "accept")
-}
-
-func TestIntegration_Reject_Code550(t *testing.T) {
-	addr := startTestServer(t, actionReject, "550")
-	buf := captureLog(t)
-
-	r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
-
-	act := r.effectiveAction()
-	if act.Code != milter.ActReplyCode {
-		t.Fatalf("got %v, want ReplyCode", act.Code)
-	}
-	if act.SMTPCode != 550 {
-		t.Errorf("SMTP code %d, want 550", act.SMTPCode)
-	}
-
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "return_code", "reject")
+		act := r.effectiveAction()
+		if act.Code != milter.ActReplyCode {
+			t.Fatalf("got %v, want ReplyCode", act.Code)
+		}
+		if act.SMTPCode != 550 {
+			t.Errorf("SMTP code %d, want 550", act.SMTPCode)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "return_code", "reject")
+	})
 }
 
 // ---------------------------------------------------------------------------
 // action: discard
 // ---------------------------------------------------------------------------
 
-func TestIntegration_Discard_Unauthenticated(t *testing.T) {
-	addr := startTestServer(t, actionDiscard, "421")
-	buf := captureLog(t)
+func TestAction_Discard(t *testing.T) {
+	t.Run("unauthenticated session passes through without inspection", func(t *testing.T) {
+		addr := startTestServer(t, actionDiscard, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
+		r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-	assertNoLog(t, buf)
-}
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		assertNoLog(t, buf)
+	})
 
-func TestIntegration_Discard_CheckAuthFail(t *testing.T) {
-	// authUser domain ≠ envelopeFrom → silent discard at MAIL FROM
-	addr := startTestServer(t, actionDiscard, "421")
-	buf := captureLog(t)
+	t.Run("auth domain mismatch → silent discard at MAIL FROM", func(t *testing.T) {
+		addr := startTestServer(t, actionDiscard, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "sender@other.com")
+		r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "sender@other.com")
 
-	if r.effectiveAction().Code != milter.ActDiscard {
-		t.Errorf("got %v, want Discard", r.effectiveAction().Code)
-	}
+		if r.effectiveAction().Code != milter.ActDiscard {
+			t.Errorf("got %v, want Discard", r.effectiveAction().Code)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "fail")
+		assertLog(t, entry, "return_code", "discard")
+	})
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "fail")
-	assertLog(t, entry, "return_code", "discard")
-}
+	t.Run("spoofed From header → silent discard at EOH", func(t *testing.T) {
+		addr := startTestServer(t, actionDiscard, "421")
+		buf := captureLog(t)
 
-func TestIntegration_Discard_CheckDataFail(t *testing.T) {
-	// From: domain ≠ envelope → silent discard at EOH
-	addr := startTestServer(t, actionDiscard, "421")
-	buf := captureLog(t)
+		r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
 
-	r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
+		if r.effectiveAction().Code != milter.ActDiscard {
+			t.Errorf("got %v, want Discard", r.effectiveAction().Code)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "fail")
+		assertLog(t, entry, "return_code", "discard")
+	})
 
-	if r.effectiveAction().Code != milter.ActDiscard {
-		t.Errorf("got %v, want Discard", r.effectiveAction().Code)
-	}
+	t.Run("all checks pass → accept and log", func(t *testing.T) {
+		addr := startTestServer(t, actionDiscard, "421")
+		buf := captureLog(t)
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "fail")
-	assertLog(t, entry, "return_code", "discard")
-}
+		r := sendMessage(t, addr, "user@example.com", "user@example.com", "user@example.com")
 
-func TestIntegration_Discard_AllPass(t *testing.T) {
-	addr := startTestServer(t, actionDiscard, "421")
-	buf := captureLog(t)
-
-	r := sendMessage(t, addr, "user@example.com", "user@example.com", "user@example.com")
-
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "pass")
-	assertLog(t, entry, "return_code", "accept")
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "pass")
+		assertLog(t, entry, "return_code", "accept")
+	})
 }
 
 // ---------------------------------------------------------------------------
 // action: quarantine_header
 // ---------------------------------------------------------------------------
 
-func TestIntegration_Quarantine_Unauthenticated(t *testing.T) {
-	addr := startTestServer(t, actionQuarantineHeader, "421")
-	buf := captureLog(t)
+func TestAction_QuarantineHeader(t *testing.T) {
+	t.Run("unauthenticated session passes through without inspection", func(t *testing.T) {
+		addr := startTestServer(t, actionQuarantineHeader, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
+		r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-	assertNoLog(t, buf)
-}
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		assertNoLog(t, buf)
+	})
 
-func TestIntegration_Quarantine_CheckAuthFail(t *testing.T) {
-	// authUser domain ≠ envelopeFrom — not rejected, passes through with X-MF-Quarantine: yes
-	addr := startTestServer(t, actionQuarantineHeader, "421")
-	buf := captureLog(t)
+	t.Run("auth domain mismatch → accept with X-MF-Quarantine: yes", func(t *testing.T) {
+		addr := startTestServer(t, actionQuarantineHeader, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "CEO <ceo@victim.com>")
+		r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "CEO <ceo@victim.com>")
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-	assertHeader(t, r.modifyActs, headerQuarantine, "yes")
-	assertHeader(t, r.modifyActs, headerEnvelopeFrom, "sender@other.com")
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		assertHeader(t, r.modifyActs, headerQuarantine, "yes")
+		assertHeader(t, r.modifyActs, headerEnvelopeFrom, "sender@other.com")
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "fail")
+		assertLog(t, entry, "return_code", "accept")
+	})
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "fail")
-	assertLog(t, entry, "return_code", "accept")
-}
+	t.Run("spoofed From header → accept with X-MF-Quarantine: yes + X-MF-* headers", func(t *testing.T) {
+		addr := startTestServer(t, actionQuarantineHeader, "421")
+		buf := captureLog(t)
 
-func TestIntegration_Quarantine_CheckDataFail(t *testing.T) {
-	// From: domain ≠ envelope → passes through with X-MF-Quarantine: yes + headers
-	addr := startTestServer(t, actionQuarantineHeader, "421")
-	buf := captureLog(t)
+		r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
 
-	r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		assertHeader(t, r.modifyActs, headerQuarantine, "yes")
+		assertHeader(t, r.modifyActs, headerEnvelopeFrom, "attacker@attacker.com")
+		assertHeader(t, r.modifyActs, headerFrom, "ceo@victim.com")
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "fail")
+		assertLog(t, entry, "return_code", "accept")
+	})
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-	assertHeader(t, r.modifyActs, headerQuarantine, "yes")
-	assertHeader(t, r.modifyActs, headerEnvelopeFrom, "attacker@attacker.com")
-	assertHeader(t, r.modifyActs, headerFrom, "ceo@victim.com")
+	t.Run("all checks pass → accept with X-MF-Quarantine: no + X-MF-* headers", func(t *testing.T) {
+		addr := startTestServer(t, actionQuarantineHeader, "421")
+		buf := captureLog(t)
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "fail")
-	assertLog(t, entry, "return_code", "accept")
-}
+		r := sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
 
-func TestIntegration_Quarantine_AllPass(t *testing.T) {
-	addr := startTestServer(t, actionQuarantineHeader, "421")
-	buf := captureLog(t)
-
-	r := sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
-
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-	assertHeader(t, r.modifyActs, headerQuarantine, "no")
-	assertHeader(t, r.modifyActs, headerEnvelopeFrom, "user@example.com")
-	assertHeader(t, r.modifyActs, headerFrom, "user@example.com")
-
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "pass")
-	assertLog(t, entry, "return_code", "accept")
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		assertHeader(t, r.modifyActs, headerQuarantine, "no")
+		assertHeader(t, r.modifyActs, headerEnvelopeFrom, "user@example.com")
+		assertHeader(t, r.modifyActs, headerFrom, "user@example.com")
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "pass")
+		assertLog(t, entry, "return_code", "accept")
+	})
 }
 
 // ---------------------------------------------------------------------------
 // action: accept
 // ---------------------------------------------------------------------------
 
-func TestIntegration_Accept_Unauthenticated(t *testing.T) {
-	addr := startTestServer(t, actionDunno, "421")
-	buf := captureLog(t)
+func TestAction_Accept(t *testing.T) {
+	t.Run("unauthenticated session passes through without inspection", func(t *testing.T) {
+		addr := startTestServer(t, actionDunno, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
+		r := sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-	assertNoLog(t, buf)
-}
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		assertNoLog(t, buf)
+	})
 
-func TestIntegration_Accept_CheckAuthFail(t *testing.T) {
-	// Even with auth mismatch — accept and log only
-	addr := startTestServer(t, actionDunno, "421")
-	buf := captureLog(t)
+	t.Run("auth domain mismatch → accept and log violation", func(t *testing.T) {
+		addr := startTestServer(t, actionDunno, "421")
+		buf := captureLog(t)
 
-	r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "CEO <ceo@victim.com>")
+		r := sendMessage(t, addr, "user@legit.com", "sender@other.com", "CEO <ceo@victim.com>")
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "fail")
+		assertLog(t, entry, "return_code", "accept")
+	})
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "fail")
-	assertLog(t, entry, "return_code", "accept")
-}
+	t.Run("spoofed From header → accept and log violation", func(t *testing.T) {
+		addr := startTestServer(t, actionDunno, "421")
+		buf := captureLog(t)
 
-func TestIntegration_Accept_CheckDataFail(t *testing.T) {
-	// Spoofed From: — accept and log only
-	addr := startTestServer(t, actionDunno, "421")
-	buf := captureLog(t)
+		r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
 
-	r := sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "fail")
+		assertLog(t, entry, "return_code", "accept")
+	})
 
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
+	t.Run("all checks pass → accept and log", func(t *testing.T) {
+		addr := startTestServer(t, actionDunno, "421")
+		buf := captureLog(t)
 
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "fail")
-	assertLog(t, entry, "return_code", "accept")
-}
+		r := sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
 
-func TestIntegration_Accept_AllPass(t *testing.T) {
-	addr := startTestServer(t, actionDunno, "421")
-	buf := captureLog(t)
-
-	r := sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
-
-	if r.effectiveAction().Code != milter.ActAccept {
-		t.Errorf("got %v, want Accept", r.effectiveAction().Code)
-	}
-
-	entry := lastLogEntry(buf)
-	assertLog(t, entry, "flag_check_auth", "pass")
-	assertLog(t, entry, "flag_check_data", "pass")
-	assertLog(t, entry, "return_code", "accept")
+		if r.effectiveAction().Code != milter.ActAccept {
+			t.Errorf("got %v, want Accept", r.effectiveAction().Code)
+		}
+		entry := lastLogEntry(buf)
+		assertLog(t, entry, "flag_check_auth", "pass")
+		assertLog(t, entry, "flag_check_data", "pass")
+		assertLog(t, entry, "return_code", "accept")
+	})
 }
