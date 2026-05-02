@@ -29,14 +29,14 @@ For every authenticated session the milter performs two checks:
 
 ## Actions
 
-Configured via the `ACTION` environment variable.
+Configured via the `MF_ACTION` environment variable.
 
 | Action | On `flag_check_auth` fail | On `flag_check_data` fail | On both pass |
 |:---|:---|:---|:---|
 | `reject` | `421 4.7.1 … MFC010001` | `421 4.7.1 … MFC010002` | log + accept |
 | `discard` | silent drop, log `MFC020001` | silent drop, log `MFC020002` | log + accept |
 | `quarantine_header` | log + add headers (`X-MF-Quarantine: yes`) | log + add headers (`X-MF-Quarantine: yes`) | log + add headers (`X-MF-Quarantine: no`) |
-| `dunno` | log only, accept | log only, accept | log only, accept |
+| `accept` | log only, accept | log only, accept | log only, accept |
 
 Default: `reject`.
 
@@ -72,7 +72,7 @@ Every processed authenticated message produces one JSON log entry:
 }
 ```
 
-`return_code` values: `reject`, `discard`, `dunno`.
+`return_code` values: `reject`, `discard`, `accept`.
 
 ---
 
@@ -93,7 +93,7 @@ milter_default_action = accept
 | Variable | Default | Description |
 |:---|:---|:---|
 | `LISTEN_ADDR` | `0.0.0.0:10031` | TCP address to listen on |
-| `ACTION` | `reject` | `reject` / `discard` / `quarantine_header` / `dunno` |
+| `MF_ACTION` | `reject` | `reject` / `discard` / `quarantine_header` / `accept` |
 | `LOG_LEVEL` | — | Set to `debug` for verbose per-message logging |
 
 ---
@@ -140,7 +140,7 @@ kubectl apply -f argocd-app.yaml
 
 ```sh
 docker build -t mailfrom:dev app/go/
-docker run --rm -p 10031:10031 -e ACTION=dunno -e LOG_LEVEL=debug mailfrom:dev
+docker run --rm -p 10031:10031 -e MF_ACTION=accept -e LOG_LEVEL=debug mailfrom:dev
 ```
 
 ---

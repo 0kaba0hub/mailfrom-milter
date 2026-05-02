@@ -3,10 +3,12 @@
 //
 // Environment variables:
 //
-//	LISTEN_ADDR  — TCP address to listen on (default: 0.0.0.0:10031)
-//	ACTION       — Action on mismatch: reject | discard | quarantine_header | dunno
-//	               (default: reject)
-//	LOG_LEVEL    — Set to "debug" for verbose per-message logging
+//	LISTEN_ADDR   — TCP address to listen on (default: 0.0.0.0:10031)
+//	MF_ACTION     — Action on mismatch: reject | discard | quarantine_header | accept
+//	                (default: reject)
+//	REJECT_CODE   — SMTP reply code for reject action: 421 (temp) or 550 (permanent)
+//	                (default: 421)
+//	LOG_LEVEL     — Set to "debug" for verbose per-message logging
 package main
 
 import (
@@ -29,7 +31,7 @@ const (
 	actionReject           = "reject"
 	actionDiscard          = "discard"
 	actionQuarantineHeader = "quarantine_header"
-	actionDunno            = "dunno"
+	actionDunno            = "accept"
 
 	defaultListenAddr = "0.0.0.0:10031"
 	defaultAction     = actionReject
@@ -42,18 +44,24 @@ const (
 type config struct {
 	listenAddr string
 	action     string
+	rejectCode string
 }
 
 func loadConfig() config {
 	cfg := config{
 		listenAddr: envOrDefault("LISTEN_ADDR", defaultListenAddr),
-		action:     strings.ToLower(envOrDefault("ACTION", defaultAction)),
+		action:     strings.ToLower(envOrDefault("MF_ACTION", defaultAction)),
+		rejectCode: envOrDefault("REJECT_CODE", "421"),
 	}
 	switch cfg.action {
 	case actionReject, actionDiscard, actionQuarantineHeader, actionDunno:
 	default:
-		slog.Warn("unknown ACTION value, falling back to reject", "value", cfg.action)
+		slog.Warn("unknown MF_ACTION value, falling back to reject", "value", cfg.action)
 		cfg.action = actionReject
+	}
+	if len(cfg.rejectCode) != 3 || (cfg.rejectCode[0] != '4' && cfg.rejectCode[0] != '5') {
+		slog.Warn("invalid REJECT_CODE, falling back to 421", "value", cfg.rejectCode)
+		cfg.rejectCode = "421"
 	}
 	return cfg
 }
@@ -87,13 +95,13 @@ const (
 	checkPass = "pass"
 	checkFail = "fail"
 
-	rejectMsgAuth  = "421 4.7.1 Rejected due of violation of policy. Error code: MFC010001"
-	rejectMsgData  = "421 4.7.1 Rejected due of violation of policy. Error code: MFC010002"
-	discardMsgAuth = "5.7.1 Discarded due of violation of policy. Error code: MFC020001"
-	discardMsgData = "5.7.1 Discarded due of violation of policy. Error code: MFC020002"
 )
 
-func rejectWith(msg string) milter.Response {
+// rejectWith builds a reject response using cfg.rejectCode.
+// The enhanced status code class (4.x.x / 5.x.x) is derived from the first digit.
+func rejectWith(mfCode string) milter.Response {
+	class := string(cfg.rejectCode[0])
+	msg := cfg.rejectCode + " " + class + ".7.1 Rejected due of violation of policy. Error code: " + mfCode
 	return milter.NewResponseStr(byte(milter.ActReplyCode), msg)
 }
 
@@ -160,17 +168,9 @@ func (s *milterSession) MailFrom(from string, m *milter.Modifier) (milter.Respon
 		switch cfg.action {
 		case actionReject:
 			s.logResult(actionReject)
-			return rejectWith(rejectMsgAuth), nil
+			return rejectWith("MFC010001"), nil
 		case actionDiscard:
-			slog.Info("milter",
-				"envelope_from", s.envelopeFrom,
-				"auth_user", s.authUser,
-				"flag_check_auth", s.flagCheckAuth,
-				"from_header", s.fromHeader,
-				"flag_check_data", s.flagCheckData,
-				"return_code", actionDiscard,
-				"reason", discardMsgAuth,
-			)
+			s.logResult(actionDiscard)
 			return milter.RespDiscard, nil
 		}
 	}
@@ -259,15 +259,7 @@ func (s *milterSession) handleQuarantineHeader() (milter.Response, error) {
 func (s *milterSession) handleDiscard() (milter.Response, error) {
 	s.runChecks()
 	if s.flagCheckData == checkFail {
-		slog.Info("milter",
-			"envelope_from", s.envelopeFrom,
-			"auth_user", s.authUser,
-			"flag_check_auth", s.flagCheckAuth,
-			"from_header", s.fromHeader,
-			"flag_check_data", s.flagCheckData,
-			"return_code", actionDiscard,
-			"reason", discardMsgData,
-		)
+		s.logResult(actionDiscard)
 		return milter.RespDiscard, nil
 	}
 	s.logResult(actionDunno)
@@ -278,7 +270,7 @@ func (s *milterSession) handleReject() (milter.Response, error) {
 	s.runChecks()
 	if s.flagCheckData == checkFail {
 		s.logResult(actionReject)
-		return rejectWith(rejectMsgData), nil
+		return rejectWith("MFC010002"), nil
 	}
 	s.logResult(actionDunno)
 	return milter.RespAccept, nil

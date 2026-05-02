@@ -11,8 +11,8 @@ replicaCount: 1
 milterPort: 10031
 
 # Action on envelope-from / From-header domain mismatch.
-# Values: reject | discard | quarantine_header | dunno
-action: reject
+# Values: reject | discard | quarantine_header | accept
+MF_ACTION: reject
 
 # Set to "debug" to enable verbose per-message logging
 logLevel: ""

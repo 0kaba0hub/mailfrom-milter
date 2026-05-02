@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+    </marker>
+    <marker id="arr-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#c0392b"/>
+    </marker>
+    <marker id="arr-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7f8c8d"/>
+    </marker>
+    <marker id="arr-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#27ae60"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#00000022"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="480" fill="#f5f6fa"/>
+
+  <!-- ── SMTP Client ── -->
+  <rect x="24" y="185" width="130" height="70" rx="8" fill="#dfe6e9" stroke="#b2bec3" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="89" y="214" text-anchor="middle" font-size="13" font-weight="bold" fill="#2d3436">SMTP Client</text>
+  <text x="89" y="232" text-anchor="middle" font-size="11" fill="#636e72">authenticated</text>
+  <text x="89" y="247" text-anchor="middle" font-size="11" fill="#636e72">SASL session</text>
+
+  <!-- arrow SMTP → Postfix -->
+  <line x1="154" y1="220" x2="192" y2="220" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="173" y="213" text-anchor="middle" font-size="10" fill="#555">SMTP</text>
+
+  <!-- ── Postfix ── -->
+  <rect x="192" y="155" width="148" height="130" rx="8" fill="#ffeaa7" stroke="#fdcb6e" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="266" y="178" text-anchor="middle" font-size="13" font-weight="bold" fill="#2d3436">Postfix MTA</text>
+  <line x1="206" y1="185" x2="326" y2="185" stroke="#fdcb6e" stroke-width="1"/>
+  <text x="266" y="203" text-anchor="middle" font-size="11" fill="#636e72">MAIL FROM</text>
+  <text x="266" y="220" text-anchor="middle" font-size="11" fill="#636e72">From: header</text>
+  <text x="266" y="237" text-anchor="middle" font-size="11" fill="#636e72">{auth_authen}</text>
+  <text x="266" y="254" text-anchor="middle" font-size="11" fill="#636e72">{client_addr}</text>
+  <text x="266" y="271" text-anchor="middle" font-size="11" fill="#636e72">milter_mail_macros</text>
+
+  <!-- arrow Postfix → Milter -->
+  <line x1="340" y1="220" x2="388" y2="220" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="364" y="213" text-anchor="middle" font-size="10" fill="#555">milter</text>
+  <text x="364" y="226" text-anchor="middle" font-size="10" fill="#555">proto</text>
+
+  <!-- ── mailfrom-milter box ── -->
+  <rect x="388" y="100" width="216" height="240" rx="8" fill="#ffffff" stroke="#00b894" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="388" y="100" width="216" height="36" rx="8" fill="#00b894"/>
+  <rect x="388" y="118" width="216" height="18" fill="#00b894"/>
+  <text x="496" y="123" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">mailfrom-milter</text>
+
+  <!-- check A -->
+  <rect x="404" y="148" width="184" height="52" rx="6" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.2"/>
+  <text x="496" y="167" text-anchor="middle" font-size="11" font-weight="bold" fill="#1e8449">flag_check_auth</text>
+  <text x="496" y="183" text-anchor="middle" font-size="10" fill="#2d6a4f">SASL domain  vs  MAIL FROM domain</text>
+  <text x="496" y="196" text-anchor="middle" font-size="10" fill="#555">pass / fail</text>
+
+  <!-- check B -->
+  <rect x="404" y="212" width="184" height="52" rx="6" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.2"/>
+  <text x="496" y="231" text-anchor="middle" font-size="11" font-weight="bold" fill="#1e8449">flag_check_data</text>
+  <text x="496" y="247" text-anchor="middle" font-size="10" fill="#2d6a4f">MAIL FROM domain  vs  From: domain</text>
+  <text x="496" y="260" text-anchor="middle" font-size="10" fill="#555">pass / fail</text>
+
+  <!-- env hint -->
+  <text x="496" y="295" text-anchor="middle" font-size="10" fill="#888">ACTION  |  REJECT_CODE</text>
+  <text x="496" y="310" text-anchor="middle" font-size="10" fill="#888">configured via env vars</text>
+  <text x="496" y="328" text-anchor="middle" font-size="10" fill="#aaa">only authenticated sessions</text>
+
+  <!-- ── Outcome boxes ── -->
+
+  <!-- reject -->
+  <rect x="650" y="90" width="218" height="64" rx="8" fill="#fadbd8" stroke="#c0392b" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="759" y="114" text-anchor="middle" font-size="13" font-weight="bold" fill="#c0392b">reject</text>
+  <text x="759" y="131" text-anchor="middle" font-size="10" fill="#7b241c">421 / 550  4/5.7.1  MFC010001/2</text>
+  <text x="759" y="146" text-anchor="middle" font-size="10" fill="#7b241c">SMTP rejection, sender is notified</text>
+
+  <!-- discard -->
+  <rect x="650" y="174" width="218" height="64" rx="8" fill="#e8daef" stroke="#7d3c98" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="759" y="198" text-anchor="middle" font-size="13" font-weight="bold" fill="#6c3483">discard</text>
+  <text x="759" y="215" text-anchor="middle" font-size="10" fill="#6c3483">250 OK to sender, silent drop</text>
+  <text x="759" y="230" text-anchor="middle" font-size="10" fill="#6c3483">message never reaches queue</text>
+
+  <!-- quarantine_header -->
+  <rect x="650" y="258" width="218" height="64" rx="8" fill="#fdebd0" stroke="#d35400" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="759" y="282" text-anchor="middle" font-size="13" font-weight="bold" fill="#d35400">quarantine_header</text>
+  <text x="759" y="299" text-anchor="middle" font-size="10" fill="#a04000">add X-MF-* headers, pass through</text>
+  <text x="759" y="314" text-anchor="middle" font-size="10" fill="#a04000">X-MF-Quarantine: yes / no</text>
+
+  <!-- dunno -->
+  <rect x="650" y="342" width="218" height="64" rx="8" fill="#d6eaf8" stroke="#1a5276" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="759" y="366" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a5276">dunno</text>
+  <text x="759" y="383" text-anchor="middle" font-size="10" fill="#1a5276">log only, accept message</text>
+  <text x="759" y="398" text-anchor="middle" font-size="10" fill="#1a5276">no SMTP-level intervention</text>
+
+  <!-- arrows milter → outcomes -->
+  <line x1="604" y1="190" x2="648" y2="122" stroke="#c0392b" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <line x1="604" y1="205" x2="648" y2="206" stroke="#7d3c98" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="604" y1="220" x2="648" y2="290" stroke="#d35400" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="604" y1="235" x2="648" y2="374" stroke="#1a5276" stroke-width="1.5" marker-end="url(#arr)"/>
+
+</svg>

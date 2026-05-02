@@ -10,8 +10,8 @@ replicaCount: 1
 
 milterPort: 10031
 
-# reject | discard | quarantine_header | dunno
-action: reject
+# reject | discard | quarantine_header | accept
+MF_ACTION: accept
 
 logLevel: ""
 
