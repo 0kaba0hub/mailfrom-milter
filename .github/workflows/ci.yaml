@@ -21,6 +21,24 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go/go.mod
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: app/go
+          version: latest
+
   test:
     name: Test
     runs-on: ubuntu-24.04
@@ -40,7 +58,7 @@ jobs:
   build:
     name: Build & Push
     if: github.event_name == 'push'
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-24.04
     concurrency:
       group: build-main-${{ github.ref }}
