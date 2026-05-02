@@ -1,4 +1,4 @@
-module github.com/0kaba0/mailfrom
+module github.com/0kaba0hub/mailfrom
 
 go 1.26.2
 
