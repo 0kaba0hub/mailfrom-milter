@@ -3,6 +3,8 @@ geometry: margin=2cm
 fontsize: 11pt
 header-includes:
   - \usepackage{fancyhdr}
+  - \usepackage{float}
+  - \floatplacement{figure}{H}
   - \pagestyle{fancy}
   - \fancyhf{}
   - \fancyhead[L]{k8s\_mailfrom}
@@ -26,7 +28,7 @@ Only authenticated SMTP sessions (SASL) are checked. Unauthenticated connections
 
 **Architecture**
 
-![mailfrom-milter architecture](arch-mailfrom.png){ width=100% }
+![mailfrom-milter architecture](arch-mailfrom.png){ width=38% }
 
 **Stack**
 
