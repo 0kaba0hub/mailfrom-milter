@@ -12,6 +12,7 @@ milterPort: 10031
 
 # reject | discard | quarantine_header | accept
 MF_ACTION: accept
+REJECT_CODE: "421"
 
 logLevel: ""
 

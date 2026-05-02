@@ -14,6 +14,9 @@ milterPort: 10031
 # Values: reject | discard | quarantine_header | accept
 MF_ACTION: reject
 
+# SMTP reply code for reject action: 421 (temporary) or 550 (permanent)
+REJECT_CODE: "421"
+
 # Set to "debug" to enable verbose per-message logging
 logLevel: ""
 
