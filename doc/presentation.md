@@ -51,7 +51,7 @@ k8s_mailfrom/
 |     |- deployment.yaml
 |     \- service.yaml
 |- helm_values/
-|  \- values-micro-seconddns.yaml
+|  \- values-sandbox.yaml
 |- doc/
 |- argocd-app.yaml
 \- .github/workflows/ci.yaml

@@ -79,8 +79,8 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            sed -i "s/^  tag: .*/  tag: \"${SHA}\"/" helm_values/values-micro-seconddns.yaml
-            git add helm_values/values-micro-seconddns.yaml
+            sed -i "s/^  tag: .*/  tag: \"${SHA}\"/" helm_values/values-sandbox.yaml
+            git add helm_values/values-sandbox.yaml
 
             if git diff --cached --quiet; then
               echo "Values already at ${SHA}, nothing to commit"

@@ -121,7 +121,7 @@ helm/
     |-  deployment.yaml
     \-  service.yaml
 helm_values/
-\-  values-micro-seconddns.yaml
+\-  values-sandbox.yaml
 argocd-app.yaml
 .github/workflows/ci.yaml
 ```
@@ -147,4 +147,4 @@ docker run --rm -p 10031:10031 -e MF_ACTION=accept -e LOG_LEVEL=debug mailfrom:d
 
 ## CI
 
-Push to `main` → builds `ghcr.io/0kaba0/mailfrom:<sha>` + `latest` for `linux/amd64`, auto-commits the new tag to `helm_values/values-micro-seconddns.yaml`.
+Push to `main` → builds `ghcr.io/0kaba0/mailfrom:<sha>` + `latest` for `linux/amd64`, auto-commits the new tag to `helm_values/values-sandbox.yaml`.

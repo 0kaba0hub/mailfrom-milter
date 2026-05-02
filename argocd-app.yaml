@@ -13,7 +13,7 @@ spec:
     path: helm
     helm:
       valueFiles:
-        - ../helm_values/values-micro-seconddns.yaml
+        - ../helm_values/values-sandbox.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: mail
