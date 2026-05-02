@@ -1,31 +1,42 @@
 # mailfrom-milter
 
-Postfix **milter** written in Go that enforces alignment between the SMTP envelope sender (`MAIL FROM` / envelope-from) and the `From:` message header (mime-from).
+Postfix **milter** written in Go that enforces alignment between the SMTP envelope sender (`MAIL FROM`) and the `From:` message header.
 
-Licensed under **GPLv3 or SecondDNS Commercial License** — see [LICENSE](LICENSE) and [LICENSE.COMMERCIAL](LICENSE.COMMERCIAL).
+Licensed under **GPLv3** — see [LICENSE](LICENSE).
 
 ---
 
 ## The problem
 
-When a mail server handles multiple domains, an authenticated user can set `MAIL FROM` to their own domain (satisfying SPF) but forge the `From:` header with any domain hosted on the same server. The DKIM signer picks up the `From:` domain and signs the message with that domain's key — producing a valid DKIM signature for a domain the sender does not own.
+When a mail server hosts multiple domains, an authenticated user can set `MAIL FROM` to their own domain but forge the `From:` header with a different domain. The DKIM signer signs using the `From:` domain — producing a valid DKIM signature for a domain the sender does not own.
 
 **This milter rejects such messages before DKIM signing occurs.**
 
-Only authenticated SMTP sessions are checked. Unauthenticated connections (inbound MX delivery, relay) pass through without inspection.
+Only authenticated SMTP sessions (SASL) are checked. Unauthenticated connections (inbound MX delivery) pass through without inspection.
+
+---
+
+## Checks
+
+For every authenticated session the milter performs two checks:
+
+| Flag | Check | Values |
+|:---|:---|:---|
+| `flag_check_auth` | SASL username domain vs `MAIL FROM` domain | `pass` / `fail` |
+| `flag_check_data` | `MAIL FROM` domain vs `From:` header domain | `pass` / `fail` |
 
 ---
 
 ## Actions
 
-Configured via the `ACTION` environment variable or Helm `action` value.
+Configured via the `ACTION` environment variable.
 
-| Action | Description |
-|:---|:---|
-| `reject` | Reject the message with SMTP 5xx. Reason code: **MFA001** |
-| `discard` | Silently discard the message (sender gets no error) |
-| `quarantine_header` | Accept the message, add `X-MF-Quarantine: yes` header |
-| `dunno` | Accept the message, log the mismatch only |
+| Action | On `flag_check_auth` fail | On `flag_check_data` fail | On both pass |
+|:---|:---|:---|:---|
+| `reject` | `421 4.7.1 … MFC010001` | `421 4.7.1 … MFC010002` | log + accept |
+| `discard` | silent drop, log `MFC020001` | silent drop, log `MFC020002` | log + accept |
+| `quarantine_header` | log + add headers (`X-MF-Quarantine: yes`) | log + add headers (`X-MF-Quarantine: yes`) | log + add headers (`X-MF-Quarantine: no`) |
+| `dunno` | log only, accept | log only, accept | log only, accept |
 
 Default: `reject`.
 
@@ -33,23 +44,39 @@ Default: `reject`.
 
 ## Headers added
 
-For every **authenticated** SMTP session, regardless of check outcome:
+For `quarantine_header` action only:
 
 | Header | Value |
 |:---|:---|
-| `X-MF-Envelope-From` | Envelope sender address from `MAIL FROM` |
+| `X-MF-Envelope-From` | `MAIL FROM` address |
+| `X-MF-From` | Address extracted from `From:` header |
+| `X-MF-Quarantine` | `yes` if any check failed, `no` if all passed |
 
-When action is `quarantine_header` and domains mismatch:
+---
 
-| Header | Value |
-|:---|:---|
-| `X-MF-Quarantine` | `yes` |
+## Log format
+
+Every processed authenticated message produces one JSON log entry:
+
+```json
+{
+  "time": "...",
+  "level": "INFO",
+  "msg": "milter",
+  "envelope_from": "user@attacker.com",
+  "auth_user": "user@attacker.com",
+  "flag_check_auth": "pass",
+  "from_header": "ceo@victim.com",
+  "flag_check_data": "fail",
+  "return_code": "reject"
+}
+```
+
+`return_code` values: `reject`, `discard`, `dunno`.
 
 ---
 
 ## Postfix configuration
-
-Add the milter to `smtpd_milters` in `/etc/postfix/main.cf`:
 
 ```
 smtpd_milters = inet:mailfrom.mail.svc.cluster.local:10031
@@ -57,7 +84,7 @@ milter_mail_macros = i {mail_addr} {client_addr} {client_name} {auth_authen} {au
 milter_default_action = accept
 ```
 
-`{auth_authen}` must be included in `milter_mail_macros` — it is present in the Postfix default value but verify it is not stripped in your configuration.
+`{auth_authen}` must be present in `milter_mail_macros` (included in Postfix defaults).
 
 ---
 
@@ -65,23 +92,9 @@ milter_default_action = accept
 
 | Variable | Default | Description |
 |:---|:---|:---|
-| `LISTEN_ADDR` | `0.0.0.0:10031` | TCP address the milter listens on |
-| `ACTION` | `reject` | Action on mismatch: `reject`, `discard`, `quarantine_header`, `dunno` |
+| `LISTEN_ADDR` | `0.0.0.0:10031` | TCP address to listen on |
+| `ACTION` | `reject` | `reject` / `discard` / `quarantine_header` / `dunno` |
 | `LOG_LEVEL` | — | Set to `debug` for verbose per-message logging |
-
----
-
-## Logging
-
-All logs are JSON via `log/slog`. Example entries:
-
-```json
-{"time":"...","level":"INFO","msg":"starting mailfrom-milter","listen":"0.0.0.0:10031","action":"reject"}
-{"time":"...","level":"WARN","msg":"domain mismatch detected","envelope_domain":"attacker.com","from_domain":"victim.com","envelope_from":"user@attacker.com","from_header":"CEO <ceo@victim.com>","auth_user":"user@attacker.com","client_addr":"10.0.0.5","action":"reject"}
-{"time":"...","level":"INFO","msg":"accepted","action":"accept","envelope_domain":"example.com","from_domain":"example.com","auth_user":"user@example.com","client_addr":"10.0.0.5"}
-```
-
-Enable debug logging (`LOG_LEVEL=debug`) to see every connection, MAIL FROM, and captured From: header.
 
 ---
 
@@ -97,8 +110,8 @@ Enable debug logging (`LOG_LEVEL=debug`) to see every connection, MAIL FROM, and
 
 ```
 app/go/
-|-  main.go          main binary
-|-  Dockerfile       multi-stage builder -> alpine:3.21
+|-  main.go
+|-  Dockerfile
 |-  go.mod
 \-  go.sum
 helm/
@@ -123,20 +136,15 @@ argocd-app.yaml
 kubectl apply -f argocd-app.yaml
 ```
 
-ArgoCD syncs from the `helm/` directory using `helm_values/values-micro-seconddns.yaml`.
-
-### Local build
+### Local
 
 ```sh
 docker build -t mailfrom:dev app/go/
-docker run --rm -p 10031:10031 \
-  -e ACTION=dunno \
-  -e LOG_LEVEL=debug \
-  mailfrom:dev
+docker run --rm -p 10031:10031 -e ACTION=dunno -e LOG_LEVEL=debug mailfrom:dev
 ```
 
 ---
 
 ## CI
 
-Push to `main` triggers GitHub Actions: builds `ghcr.io/0kaba0/mailfrom:<sha>` + `latest` for `linux/amd64`, then auto-commits the new tag into `helm_values/values-micro-seconddns.yaml`.
+Push to `main` → builds `ghcr.io/0kaba0/mailfrom:<sha>` + `latest` for `linux/amd64`, auto-commits the new tag to `helm_values/values-micro-seconddns.yaml`.
