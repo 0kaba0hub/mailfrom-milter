@@ -55,17 +55,22 @@ jobs:
         with:
           go-version-file: app/go/go.mod
 
+      - name: Install go-junit-report
+        run: go install github.com/jstemmer/go-junit-report/v2@latest
+
       - name: Run tests
         working-directory: app/go
-        run: go test -v -json ./... > /tmp/test-results.json; exit ${PIPESTATUS[0]}
+        run: |
+          set -o pipefail
+          go test -v ./... 2>&1 | go-junit-report -set-exit-code > /tmp/test-results.xml
 
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: Go Tests
-          path: /tmp/test-results.json
-          reporter: golang-json
+          path: /tmp/test-results.xml
+          reporter: java-junit
 
   build:
     name: Build & Push
