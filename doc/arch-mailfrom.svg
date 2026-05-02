@@ -88,9 +88,9 @@
   <text x="759" y="299" text-anchor="middle" font-size="10" fill="#a04000">add X-MF-* headers, pass through</text>
   <text x="759" y="314" text-anchor="middle" font-size="10" fill="#a04000">X-MF-Quarantine: yes / no</text>
 
-  <!-- dunno -->
+  <!-- accept -->
   <rect x="650" y="342" width="218" height="64" rx="8" fill="#d6eaf8" stroke="#1a5276" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="759" y="366" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a5276">dunno</text>
+  <text x="759" y="366" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a5276">accept</text>
   <text x="759" y="383" text-anchor="middle" font-size="10" fill="#1a5276">log only, accept message</text>
   <text x="759" y="398" text-anchor="middle" font-size="10" fill="#1a5276">no SMTP-level intervention</text>
 
