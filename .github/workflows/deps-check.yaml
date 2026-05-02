@@ -42,7 +42,7 @@ jobs:
 
       - name: Create issue if updates available
         if: steps.check.outputs.has_updates == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const updates = `${{ steps.check.outputs.updates }}`;
