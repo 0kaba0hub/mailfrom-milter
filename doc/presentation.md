@@ -32,7 +32,7 @@ Only authenticated SMTP sessions (SASL) are checked. Unauthenticated connections
 **Stack**
 
 - Go 1.26 (`alpine:3.21` runtime image)
-- `github.com/emersion/go-milter` v0.4.1
+- `github.com/emersion/go-milter` v0.4.1 *(third-party, vendored in `app/go/vendor/`)*
 - `log/slog` --- structured JSON logging
 
 **Directory layout**

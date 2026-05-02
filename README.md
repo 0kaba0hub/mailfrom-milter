@@ -101,7 +101,7 @@ milter_default_action = accept
 ## Stack
 
 - Go 1.26
-- `github.com/emersion/go-milter` v0.4.1
+- `github.com/emersion/go-milter` v0.4.1 *(third-party, vendored in `app/go/vendor/`)*
 - Alpine 3.21 runtime image
 
 ---
