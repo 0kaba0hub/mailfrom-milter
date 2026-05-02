@@ -4,7 +4,7 @@ Postfix **milter** written in Go that enforces alignment between the SMTP envelo
 
 Licensed under **GPLv3** — see [LICENSE](LICENSE).
 
-![Architecture](doc/arch-mailfrom.png)
+![Architecture](doc/arch-mailfrom.svg)
 
 ---
 
