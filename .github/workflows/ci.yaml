@@ -65,7 +65,7 @@ jobs:
           go test -v ./... 2>&1 | go-junit-report -set-exit-code > /tmp/test-results.xml
 
       - name: Publish test results
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         if: always()
         with:
           name: Go Tests
