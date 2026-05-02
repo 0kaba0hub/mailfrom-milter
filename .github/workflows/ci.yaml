@@ -142,4 +142,4 @@ jobs:
           package-name: mailfrom
           package-type: container
           min-versions-to-keep: 10
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GHCR_DELETE_TOKEN }}
