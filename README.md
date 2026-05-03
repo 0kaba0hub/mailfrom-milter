@@ -108,7 +108,9 @@ milter_default_action = accept
 ## Stack
 
 - Go 1.26
-- `github.com/emersion/go-milter` v0.4.1 *(third-party, vendored in `app/go/vendor/`)*
+- [`0kaba0hub/go-milter`](https://github.com/0kaba0hub/go-milter) v0.4.1 — fork of `emersion/go-milter` with `slog` logging and `sync.Pool` write buffer
+- [`0kaba0hub/go-message`](https://github.com/0kaba0hub/go-message) v0.18.1 — fork of `emersion/go-message` (indirect dep of go-milter, no changes)
+- Both forks have weekly upstream release monitors; `go.mod` uses `replace` directives
 - Alpine 3.21 runtime image
 
 ---
