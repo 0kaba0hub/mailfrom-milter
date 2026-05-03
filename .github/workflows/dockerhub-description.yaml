@@ -1,0 +1,29 @@
+name: Update Docker Hub description
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "README.md"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  update-description:
+    name: Update Docker Hub description
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: 0kaba0
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: 0kaba0/mailfrom-milter
+          readme-filepath: README.md
