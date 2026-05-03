@@ -9,7 +9,7 @@ COPY main.go metrics.go ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-s -w" -trimpath -o mailfrom-milter .
 
-FROM alpine:3.21
+FROM alpine:3.22
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates
