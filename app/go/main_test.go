@@ -5,7 +5,11 @@
 package main
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 )
 
@@ -89,6 +93,7 @@ func TestExtractDomainFromHeader(t *testing.T) {
 
 func TestLoadConfig_Defaults(t *testing.T) {
 	os.Unsetenv("LISTEN_ADDR")
+	os.Unsetenv("METRICS_ADDR")
 	os.Unsetenv("MF_ACTION")
 	os.Unsetenv("REJECT_CODE")
 
@@ -96,6 +101,9 @@ func TestLoadConfig_Defaults(t *testing.T) {
 
 	if c.listenAddr != defaultListenAddr {
 		t.Errorf("listenAddr = %q, want %q", c.listenAddr, defaultListenAddr)
+	}
+	if c.metricsAddr != defaultMetricsAddr {
+		t.Errorf("metricsAddr = %q, want %q", c.metricsAddr, defaultMetricsAddr)
 	}
 	if c.action != actionReject {
 		t.Errorf("action = %q, want %q", c.action, actionReject)
@@ -107,6 +115,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 
 func TestLoadConfig_EnvVars(t *testing.T) {
 	t.Setenv("LISTEN_ADDR", "127.0.0.1:9999")
+	t.Setenv("METRICS_ADDR", "127.0.0.1:9090")
 	t.Setenv("MF_ACTION", "discard")
 	t.Setenv("REJECT_CODE", "550")
 
@@ -114,6 +123,9 @@ func TestLoadConfig_EnvVars(t *testing.T) {
 
 	if c.listenAddr != "127.0.0.1:9999" {
 		t.Errorf("listenAddr = %q, want 127.0.0.1:9999", c.listenAddr)
+	}
+	if c.metricsAddr != "127.0.0.1:9090" {
+		t.Errorf("metricsAddr = %q, want 127.0.0.1:9090", c.metricsAddr)
 	}
 	if c.action != actionDiscard {
 		t.Errorf("action = %q, want %q", c.action, actionDiscard)
@@ -213,4 +225,55 @@ func TestRejectWith(t *testing.T) {
 			t.Errorf("rejectWith(%q, %q) message = %q, want prefix %q", c.rejectCode, c.mfCode, msg, c.wantPrefix)
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Observability server
+// ---------------------------------------------------------------------------
+
+func TestObservabilityServer(t *testing.T) {
+	var ready atomic.Bool
+	ts := httptest.NewServer(newObservabilityMux(&ready))
+	defer ts.Close()
+
+	get := func(path string) int {
+		t.Helper()
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return resp.StatusCode
+	}
+
+	t.Run("healthz always 200", func(t *testing.T) {
+		if got := get("/healthz"); got != http.StatusOK {
+			t.Errorf("GET /healthz = %d, want 200", got)
+		}
+		ready.Store(true)
+		if got := get("/healthz"); got != http.StatusOK {
+			t.Errorf("GET /healthz (ready) = %d, want 200", got)
+		}
+	})
+
+	t.Run("readyz 503 before ready", func(t *testing.T) {
+		ready.Store(false)
+		if got := get("/readyz"); got != http.StatusServiceUnavailable {
+			t.Errorf("GET /readyz (not ready) = %d, want 503", got)
+		}
+	})
+
+	t.Run("readyz 200 after ready", func(t *testing.T) {
+		ready.Store(true)
+		if got := get("/readyz"); got != http.StatusOK {
+			t.Errorf("GET /readyz (ready) = %d, want 200", got)
+		}
+	})
+
+	t.Run("metrics returns 200", func(t *testing.T) {
+		if got := get("/metrics"); got != http.StatusOK {
+			t.Errorf("GET /metrics = %d, want 200", got)
+		}
+	})
 }

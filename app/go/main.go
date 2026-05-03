@@ -8,6 +8,7 @@
 // Environment variables:
 //
 //	LISTEN_ADDR   — TCP address to listen on (default: 0.0.0.0:10031)
+//	METRICS_ADDR  — TCP address for /healthz, /readyz, /metrics (default: 0.0.0.0:8081)
 //	MF_ACTION     — Action on mismatch: reject | discard | quarantine_header | accept
 //	                (default: reject)
 //	REJECT_CODE   — SMTP reply code for reject action: 421 (temp) or 550 (permanent)
@@ -22,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/emersion/go-milter"
@@ -37,8 +39,9 @@ const (
 	actionQuarantineHeader = "quarantine_header"
 	actionDunno            = "accept"
 
-	defaultListenAddr = "0.0.0.0:10031"
-	defaultAction     = actionReject
+	defaultListenAddr  = "0.0.0.0:10031"
+	defaultMetricsAddr = "0.0.0.0:8081"
+	defaultAction      = actionReject
 
 	headerEnvelopeFrom = "X-MF-Envelope-From"
 	headerFrom         = "X-MF-From"
@@ -46,16 +49,18 @@ const (
 )
 
 type config struct {
-	listenAddr string
-	action     string
-	rejectCode string
+	listenAddr  string
+	metricsAddr string
+	action      string
+	rejectCode  string
 }
 
 func loadConfig() config {
 	cfg := config{
-		listenAddr: envOrDefault("LISTEN_ADDR", defaultListenAddr),
-		action:     strings.ToLower(envOrDefault("MF_ACTION", defaultAction)),
-		rejectCode: envOrDefault("REJECT_CODE", "421"),
+		listenAddr:  envOrDefault("LISTEN_ADDR", defaultListenAddr),
+		metricsAddr: envOrDefault("METRICS_ADDR", defaultMetricsAddr),
+		action:      strings.ToLower(envOrDefault("MF_ACTION", defaultAction)),
+		rejectCode:  envOrDefault("REJECT_CODE", "421"),
 	}
 	switch cfg.action {
 	case actionReject, actionDiscard, actionQuarantineHeader, actionDunno:
@@ -98,11 +103,10 @@ var cfg config
 const (
 	checkPass = "pass"
 	checkFail = "fail"
-
+	checkSkip = "skip"
 )
 
 // rejectWith builds a reject response using cfg.rejectCode.
-// The enhanced status code class (4.x.x / 5.x.x) is derived from the first digit.
 func rejectWith(mfCode string) milter.Response {
 	class := string(cfg.rejectCode[0])
 	msg := cfg.rejectCode + " " + class + ".7.1 Rejected due of violation of policy. Error code: " + mfCode
@@ -117,8 +121,8 @@ type milterSession struct {
 	envelopeFrom  string
 	authUser      string
 	fromHeader    string
-	flagCheckAuth string // pass / fail — authUser domain vs envelopeFrom domain
-	flagCheckData string // pass / fail — envelopeFrom domain vs From: header domain
+	flagCheckAuth string
+	flagCheckData string
 }
 
 func (s *milterSession) reset() {
@@ -134,6 +138,7 @@ func (s *milterSession) Connect(host string, family string, port uint16, addr ne
 		s.clientAddr = addr.String()
 	}
 	debugf("connect", "host", host, "addr", s.clientAddr)
+	metricConnections.Inc()
 	return milter.RespContinue, nil
 }
 
@@ -147,9 +152,9 @@ func (s *milterSession) MailFrom(from string, m *milter.Modifier) (milter.Respon
 	s.authUser = m.Macros["{auth_authen}"]
 
 	// No SASL auth — inbound delivery, not our concern.
-	// Return Accept: milter stops processing this message entirely.
 	if s.authUser == "" {
 		debugf("unauthenticated, skipping", "envelope_from", s.envelopeFrom)
+		recordMessage("accept", checkSkip, checkSkip)
 		return milter.RespAccept, nil
 	}
 
@@ -172,9 +177,11 @@ func (s *milterSession) MailFrom(from string, m *milter.Modifier) (milter.Respon
 		switch cfg.action {
 		case actionReject:
 			s.logResult(actionReject)
+			recordMessage("reject", s.flagCheckAuth, checkSkip)
 			return rejectWith("MFC010001"), nil
 		case actionDiscard:
 			s.logResult(actionDiscard)
+			recordMessage("discard", s.flagCheckAuth, checkSkip)
 			return milter.RespDiscard, nil
 		}
 	}
@@ -211,8 +218,7 @@ func (s *milterSession) Headers(h textproto.MIMEHeader, m *milter.Modifier) (mil
 	}
 }
 
-// runChecks performs check B (envelopeFrom domain vs From: header domain)
-// and stores the result in s.flagCheckData.
+// runChecks performs check B (envelopeFrom domain vs From: header domain).
 func (s *milterSession) runChecks() {
 	envDomain := extractDomain(s.envelopeFrom)
 	fromDomain := extractDomainFromHeader(s.fromHeader)
@@ -234,7 +240,6 @@ func (s *milterSession) logResult(returnCode string) {
 	)
 }
 
-
 func (s *milterSession) addHeaders(m *milter.Modifier, quarantineVal string) {
 	if err := m.AddHeader(headerEnvelopeFrom, s.envelopeFrom); err != nil {
 		slog.Error("failed to add "+headerEnvelopeFrom, "err", err)
@@ -250,13 +255,14 @@ func (s *milterSession) addHeaders(m *milter.Modifier, quarantineVal string) {
 func (s *milterSession) handleDunno() (milter.Response, error) {
 	s.runChecks()
 	s.logResult(actionDunno)
+	recordMessage("accept", s.flagCheckAuth, s.flagCheckData)
 	return milter.RespAccept, nil
 }
 
 func (s *milterSession) handleQuarantineHeader() (milter.Response, error) {
 	s.runChecks()
 	s.logResult(actionDunno)
-	// Continue to Body() to add headers.
+	// Metric is recorded in Body() once quarantine value is known.
 	return milter.RespContinue, nil
 }
 
@@ -264,9 +270,11 @@ func (s *milterSession) handleDiscard() (milter.Response, error) {
 	s.runChecks()
 	if s.flagCheckData == checkFail {
 		s.logResult(actionDiscard)
+		recordMessage("discard", s.flagCheckAuth, s.flagCheckData)
 		return milter.RespDiscard, nil
 	}
 	s.logResult(actionDunno)
+	recordMessage("accept", s.flagCheckAuth, s.flagCheckData)
 	return milter.RespAccept, nil
 }
 
@@ -274,9 +282,11 @@ func (s *milterSession) handleReject() (milter.Response, error) {
 	s.runChecks()
 	if s.flagCheckData == checkFail {
 		s.logResult(actionReject)
+		recordMessage("reject", s.flagCheckAuth, s.flagCheckData)
 		return rejectWith("MFC010002"), nil
 	}
 	s.logResult(actionDunno)
+	recordMessage("accept", s.flagCheckAuth, s.flagCheckData)
 	return milter.RespAccept, nil
 }
 
@@ -291,6 +301,12 @@ func (s *milterSession) Body(m *milter.Modifier) (milter.Response, error) {
 			quarantineVal = "yes"
 		}
 		s.addHeaders(m, quarantineVal)
+
+		metricAction := "accept"
+		if quarantineVal == "yes" {
+			metricAction = "quarantine"
+		}
+		recordMessage(metricAction, s.flagCheckAuth, s.flagCheckData)
 	}
 	return milter.RespAccept, nil
 }
@@ -341,6 +357,7 @@ func main() {
 
 	slog.Info("starting mailfrom-milter",
 		"listen", cfg.listenAddr,
+		"metrics", cfg.metricsAddr,
 		"action", cfg.action,
 	)
 
@@ -358,6 +375,11 @@ func main() {
 	}
 	defer ln.Close()
 
+	var readiness atomic.Bool
+	readiness.Store(true)
+
+	go startObservability(cfg.metricsAddr, &readiness)
+
 	go func() {
 		if err := server.Serve(ln); err != nil {
 			slog.Error("server stopped", "err", err)
@@ -372,5 +394,6 @@ func main() {
 	<-sig
 
 	slog.Info("shutting down")
+	readiness.Store(false)
 	server.Close()
 }

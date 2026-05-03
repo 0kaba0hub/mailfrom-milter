@@ -28,9 +28,14 @@ spec:
             - name: milter
               containerPort: {{ .Values.milterPort }}
               protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.metricsPort }}
+              protocol: TCP
           env:
             - name: LISTEN_ADDR
               value: "0.0.0.0:{{ .Values.milterPort }}"
+            - name: METRICS_ADDR
+              value: "0.0.0.0:{{ .Values.metricsPort }}"
             - name: MF_ACTION
               value: "{{ .Values.MF_ACTION }}"
             - name: REJECT_CODE
@@ -40,13 +45,15 @@ spec:
               value: "{{ .Values.logLevel }}"
             {{- end }}
           livenessProbe:
-            tcpSocket:
-              port: milter
+            httpGet:
+              path: /healthz
+              port: metrics
             initialDelaySeconds: 5
             periodSeconds: 15
           readinessProbe:
-            tcpSocket:
-              port: milter
+            httpGet:
+              path: /readyz
+              port: metrics
             initialDelaySeconds: 3
             periodSeconds: 10
           resources:

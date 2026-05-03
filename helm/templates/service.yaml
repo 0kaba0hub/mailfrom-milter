@@ -13,3 +13,7 @@ spec:
       port: {{ .Values.milterPort }}
       targetPort: milter
       protocol: TCP
+    - name: metrics
+      port: {{ .Values.metricsPort }}
+      targetPort: metrics
+      protocol: TCP

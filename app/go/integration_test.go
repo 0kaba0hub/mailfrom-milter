@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/emersion/go-milter"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -93,6 +95,20 @@ func assertNoLog(t *testing.T, buf *bytes.Buffer) {
 	if buf.Len() > 0 {
 		t.Errorf("expected no log output, got: %s", buf.String())
 	}
+}
+
+// counterDelta captures the current value of a counter and returns a function
+// that computes how much it increased since the snapshot.
+func counterDelta(c prometheus.Counter) func() float64 {
+	before := testutil.ToFloat64(c)
+	return func() float64 {
+		return testutil.ToFloat64(c) - before
+	}
+}
+
+// msgCounter returns the counter for a specific label combination.
+func msgCounter(action, checkAuth, checkData string) prometheus.Counter {
+	return metricMessages.WithLabelValues(action, checkAuth, checkData)
 }
 
 // ---------------------------------------------------------------------------
@@ -468,5 +484,110 @@ func TestAction_Accept(t *testing.T) {
 		assertLog(t, entry, "flag_check_auth", "pass")
 		assertLog(t, entry, "flag_check_data", "pass")
 		assertLog(t, entry, "return_code", "accept")
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Metrics counters
+// ---------------------------------------------------------------------------
+
+func TestMetrics(t *testing.T) {
+	t.Run("unauthenticated → accept/skip/skip", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		delta := counterDelta(msgCounter("accept", "skip", "skip"))
+
+		sendMessage(t, addr, "", "user@example.com", "User <user@example.com>")
+
+		if d := delta(); d != 1 {
+			t.Errorf("accept/skip/skip delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("auth mismatch + reject → reject/fail/skip", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		delta := counterDelta(msgCounter("reject", "fail", "skip"))
+
+		sendMessage(t, addr, "user@legit.com", "sender@other.com", "sender@other.com")
+
+		if d := delta(); d != 1 {
+			t.Errorf("reject/fail/skip delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("auth mismatch + discard → discard/fail/skip", func(t *testing.T) {
+		addr := startTestServer(t, actionDiscard, "421")
+		delta := counterDelta(msgCounter("discard", "fail", "skip"))
+
+		sendMessage(t, addr, "user@legit.com", "sender@other.com", "sender@other.com")
+
+		if d := delta(); d != 1 {
+			t.Errorf("discard/fail/skip delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("spoofed header + reject → reject/pass/fail", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		delta := counterDelta(msgCounter("reject", "pass", "fail"))
+
+		sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
+
+		if d := delta(); d != 1 {
+			t.Errorf("reject/pass/fail delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("spoofed header + discard → discard/pass/fail", func(t *testing.T) {
+		addr := startTestServer(t, actionDiscard, "421")
+		delta := counterDelta(msgCounter("discard", "pass", "fail"))
+
+		sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
+
+		if d := delta(); d != 1 {
+			t.Errorf("discard/pass/fail delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("spoofed header + quarantine → quarantine/pass/fail", func(t *testing.T) {
+		addr := startTestServer(t, actionQuarantineHeader, "421")
+		delta := counterDelta(msgCounter("quarantine", "pass", "fail"))
+
+		sendMessage(t, addr, "attacker@attacker.com", "attacker@attacker.com", "CEO <ceo@victim.com>")
+
+		if d := delta(); d != 1 {
+			t.Errorf("quarantine/pass/fail delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("clean + quarantine → accept/pass/pass", func(t *testing.T) {
+		addr := startTestServer(t, actionQuarantineHeader, "421")
+		delta := counterDelta(msgCounter("accept", "pass", "pass"))
+
+		sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
+
+		if d := delta(); d != 1 {
+			t.Errorf("accept/pass/pass delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("clean + reject → accept/pass/pass", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		delta := counterDelta(msgCounter("accept", "pass", "pass"))
+
+		sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
+
+		if d := delta(); d != 1 {
+			t.Errorf("accept/pass/pass delta = %v, want 1", d)
+		}
+	})
+
+	t.Run("connection counter increments per session", func(t *testing.T) {
+		addr := startTestServer(t, actionReject, "421")
+		delta := counterDelta(metricConnections)
+
+		sendMessage(t, addr, "user@example.com", "user@example.com", "User <user@example.com>")
+
+		if d := delta(); d != 1 {
+			t.Errorf("connections delta = %v, want 1", d)
+		}
 	})
 }

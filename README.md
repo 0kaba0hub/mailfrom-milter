@@ -79,7 +79,7 @@ Every processed authenticated message produces one JSON log entry:
 }
 ```
 
-`return_code` values: `reject`, `discard`, `accept`.
+`return_code` values: `reject`, `discard`, `accept`. (For `quarantine_header`, `return_code` is always `accept`; use the `X-MF-Quarantine` header or `mailfrom_messages_total{action="quarantine"}` metric to detect flagged messages.)
 
 ---
 
@@ -95,12 +95,48 @@ milter_default_action = accept
 
 ---
 
+## Observability
+
+### HTTP endpoints (port 8081)
+
+| Path | Description |
+|:---|:---|
+| `/healthz` | Liveness — always `200 OK` while the process is running |
+| `/readyz` | Readiness — `200 OK` after the milter socket is bound, `503` during shutdown |
+| `/metrics` | Prometheus metrics in text format |
+
+### Prometheus metrics
+
+**`mailfrom_connections_total`** — counter, total SMTP connections accepted.
+
+**`mailfrom_messages_total`** — counter, SMTP messages processed.
+
+Labels:
+
+| Label | Values | Description |
+|:---|:---|:---|
+| `action` | `accept` / `reject` / `discard` / `quarantine` | Final disposition |
+| `check_auth` | `pass` / `fail` / `skip` | SASL username domain vs `MAIL FROM` domain |
+| `check_data` | `pass` / `fail` / `skip` | `MAIL FROM` domain vs `From:` header domain |
+
+`skip` means the check was not reached (unauthenticated session, or action decided before the check ran).
+
+Example query — rejection rate over 5 minutes:
+
+```promql
+rate(mailfrom_messages_total{action="reject"}[5m])
+```
+
+---
+
 ## Environment variables
 
 | Variable | Default | Description |
 |:---|:---|:---|
-| `LISTEN_ADDR` | `0.0.0.0:10031` | TCP address to listen on |
+| `LISTEN_ADDR` | `0.0.0.0:10031` | TCP address for the milter socket |
+| `METRICS_ADDR` | `0.0.0.0:8081` | TCP address for `/healthz`, `/readyz`, `/metrics` |
 | `MF_ACTION` | `reject` | `reject` / `discard` / `quarantine_header` / `accept` |
+| `REJECT_CODE` | `421` | SMTP reply code for `reject` action: `421` (temp) or `550` (perm) |
 | `LOG_LEVEL` | — | Set to `debug` for verbose per-message logging |
 
 ---
@@ -120,6 +156,7 @@ milter_default_action = accept
 ```
 app/go/
 |-  main.go
+|-  metrics.go
 |-  Dockerfile
 |-  go.mod
 \-  go.sum
