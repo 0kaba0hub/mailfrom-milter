@@ -42,6 +42,11 @@ jobs:
         working-directory: app/go
         run: golangci-lint run ./...
 
+      - name: Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: app/go/Dockerfile
+
   test:
     name: Test
     runs-on: ubuntu-24.04

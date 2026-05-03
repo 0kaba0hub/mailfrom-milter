@@ -5,12 +5,13 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY main.go ./
+COPY main.go metrics.go ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-s -w" -trimpath -o mailfrom .
 
 FROM alpine:3.21
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
