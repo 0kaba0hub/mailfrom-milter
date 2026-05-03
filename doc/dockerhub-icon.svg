@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#fee2e2"/>
+
+  <!-- Shield -->
+  <path d="M256,37 L424,95 L424,271 Q424,388 256,461 Q88,388 88,271 L88,95 Z"
+        fill="#dc2626" stroke="#238636" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Skull cranium -->
+  <ellipse cx="256" cy="227" rx="80" ry="73" fill="#ffffff"/>
+
+  <!-- Jaw -->
+  <rect x="190" y="278" width="132" height="55" rx="18" fill="#ffffff"/>
+
+  <!-- Eyes (red = skull holes) -->
+  <circle cx="223" cy="227" r="26" fill="#dc2626"/>
+  <circle cx="289" cy="227" r="26" fill="#dc2626"/>
+
+  <!-- Nose -->
+  <ellipse cx="256" cy="267" rx="15" ry="18" fill="#dc2626"/>
+
+  <!-- Teeth gaps -->
+  <rect x="201" y="292" width="26" height="41" rx="7" fill="#dc2626"/>
+  <rect x="243" y="292" width="26" height="41" rx="7" fill="#dc2626"/>
+  <rect x="285" y="292" width="26" height="41" rx="7" fill="#dc2626"/>
+
+  <!-- Checkmark badge (bottom-right) -->
+  <circle cx="390" cy="400" r="72" fill="#fee2e2"/>
+  <circle cx="390" cy="400" r="60" fill="#238636"/>
+  <polyline points="360,400 382,422 424,368"
+            fill="none" stroke="#ffffff" stroke-width="16"
+            stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
