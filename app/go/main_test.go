@@ -243,7 +243,7 @@ func TestObservabilityServer(t *testing.T) {
 			t.Fatalf("GET %s: %v", path, err)
 		}
 		defer resp.Body.Close()
-		io.Copy(io.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return resp.StatusCode
 	}
 
