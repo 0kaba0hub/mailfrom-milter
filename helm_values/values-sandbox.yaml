@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/0kaba0/mailfrom
-  tag: "de3493a"
+  tag: "e8aa45c"
   pullPolicy: Always
 
 imagePullSecrets:
