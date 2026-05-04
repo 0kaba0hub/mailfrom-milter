@@ -8,8 +8,6 @@ on:
       - "app/**"
       - "helm/**"
       - ".github/workflows/ci.yaml"
-    tags:
-      - "v*.*.*"
   pull_request:
     branches:
       - main
@@ -100,6 +98,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Determine release version
+        id: version
+        run: |
+          APP_VERSION=$(awk '/^appVersion:/{gsub(/"/, ""); print $2}' helm/Chart.yaml)
+          RELEASE_TAG="v${APP_VERSION}"
+          if git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | grep -q "${RELEASE_TAG}"; then
+            IS_RELEASE=false
+          else
+            IS_RELEASE=true
+          fi
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "is_release=${IS_RELEASE}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.0.0
 
@@ -125,9 +136,9 @@ jobs:
             ${{ env.GHCR_IMAGE }}
             ${{ env.DOCKERHUB_IMAGE }}
           tags: |
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
-            type=sha,prefix=,format=short,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.tag }},enable=${{ steps.version.outputs.is_release == 'true' }}
 
       - name: Build and push
         uses: docker/build-push-action@v7.1.0
@@ -141,15 +152,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Create git tag and GitHub Release
+        if: steps.version.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
+
       - name: Update image tag in values
-        if: github.event_name == 'push'
         run: |
           set -e
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            IMAGE_TAG="$GITHUB_REF_NAME"
-          else
-            IMAGE_TAG=$(echo "${{ github.sha }}" | cut -c1-7)
-          fi
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -157,15 +174,15 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            sed -i "s/^  tag: .*/  tag: \"${IMAGE_TAG}\"/" helm_values/values-sandbox.yaml
+            sed -i "s/^  tag: .*/  tag: \"${SHA}\"/" helm_values/values-sandbox.yaml
             git add helm_values/values-sandbox.yaml
 
             if git diff --cached --quiet; then
-              echo "Values already at ${IMAGE_TAG}, nothing to commit"
+              echo "Values already at ${SHA}, nothing to commit"
               exit 0
             fi
 
-            git commit -m "ci: update mailfrom image tag to ${IMAGE_TAG} [skip ci]"
+            git commit -m "ci: update mailfrom image tag to ${SHA} [skip ci]"
 
             if git push; then
               echo "Push succeeded on attempt ${attempt}"
@@ -177,17 +194,7 @@ jobs:
           echo "Push failed after 5 attempts"
           exit 1
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
-
       - name: Update Docker Hub description
-        if: github.event_name == 'push'
         uses: peter-evans/dockerhub-description@v5
         with:
           username: 0kaba0
@@ -196,7 +203,6 @@ jobs:
           readme-filepath: README.md
 
       - name: Cleanup old package versions
-        if: github.event_name == 'push'
         uses: actions/delete-package-versions@v5
         with:
           package-name: mailfrom-milter
