@@ -203,4 +203,17 @@ docker run --rm -p 10031:10031 -e MF_ACTION=accept -e LOG_LEVEL=debug mailfrom-m
 
 ## CI
 
-Push to `main` → builds `ghcr.io/0kaba0hub/mailfrom-milter:<sha>` + `latest` for `linux/amd64`, auto-commits the new tag to `helm_values/values-sandbox.yaml`.
+Every push to `main` triggers lint → test → build:
+
+| Trigger | Image tags | Release |
+|:---|:---|:---|
+| Push to `main` | `<sha>` + `latest` | — |
+| Push to `main` with new `appVersion` in `helm/Chart.yaml` | `<sha>` + `latest` + `v{appVersion}` | GitHub Release created automatically |
+
+The sandbox values file (`helm_values/values-sandbox.yaml`) is always updated with the short SHA of the latest build.
+
+### Releasing a new version
+
+1. Bump `appVersion` in `helm/Chart.yaml` in your PR (e.g. `"1.2.0"`)
+2. Merge to `main`
+3. CI automatically creates git tag `v1.2.0`, GitHub Release, and pushes the versioned image

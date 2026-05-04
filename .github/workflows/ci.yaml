@@ -98,6 +98,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Determine release version
+        id: version
+        run: |
+          APP_VERSION=$(awk '/^appVersion:/{gsub(/"/, ""); print $2}' helm/Chart.yaml)
+          RELEASE_TAG="v${APP_VERSION}"
+          if git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | grep -q "${RELEASE_TAG}"; then
+            IS_RELEASE=false
+          else
+            IS_RELEASE=true
+          fi
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "is_release=${IS_RELEASE}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.0.0
 
@@ -124,7 +137,8 @@ jobs:
             ${{ env.DOCKERHUB_IMAGE }}
           tags: |
             type=sha,prefix=,format=short
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.tag }},enable=${{ steps.version.outputs.is_release == 'true' }}
 
       - name: Build and push
         uses: docker/build-push-action@v7.1.0
@@ -138,8 +152,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Create git tag and GitHub Release
+        if: steps.version.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
+
       - name: Update image tag in values
-        if: github.event_name == 'push'
         run: |
           set -e
           SHA=$(echo "${{ github.sha }}" | cut -c1-7)
@@ -171,7 +195,6 @@ jobs:
           exit 1
 
       - name: Update Docker Hub description
-        if: github.event_name == 'push'
         uses: peter-evans/dockerhub-description@v5
         with:
           username: 0kaba0
@@ -180,7 +203,6 @@ jobs:
           readme-filepath: README.md
 
       - name: Cleanup old package versions
-        if: github.event_name == 'push'
         uses: actions/delete-package-versions@v5
         with:
           package-name: mailfrom-milter
