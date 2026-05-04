@@ -10,7 +10,7 @@ require (
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/emersion/go-message v0.18.1 // indirect
+	github.com/emersion/go-message v0.18.2 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -24,4 +24,4 @@ require (
 
 replace github.com/emersion/go-milter v0.4.1 => github.com/0kaba0hub/go-milter v0.4.1
 
-replace github.com/emersion/go-message v0.18.1 => github.com/0kaba0hub/go-message v0.18.1
+replace github.com/emersion/go-message v0.18.2 => github.com/0kaba0hub/go-message v0.18.2

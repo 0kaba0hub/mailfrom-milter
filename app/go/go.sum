@@ -1,5 +1,5 @@
-github.com/0kaba0hub/go-message v0.18.1 h1:xkuogLrC0ZkU3iS8Xzzdy+lvM+GbeBoTDaf861F8bi4=
-github.com/0kaba0hub/go-message v0.18.1/go.mod h1:XpJyL70LwRvq2a8rVbHXikPgKj8+aI0kGdHlg16ibYA=
+github.com/0kaba0hub/go-message v0.18.2 h1:hQ+nvnNV8huaC85Otr0L45uOGkrmMLd7e9nMik0lpx8=
+github.com/0kaba0hub/go-message v0.18.2/go.mod h1:XpJyL70LwRvq2a8rVbHXikPgKj8+aI0kGdHlg16ibYA=
 github.com/0kaba0hub/go-milter v0.4.1 h1:aftJYvDcn5fH+JdWkKQBHhn2DLOorr599HMjcn9yRdY=
 github.com/0kaba0hub/go-milter v0.4.1/go.mod h1:1dcX3MTNv0s2eVxDJdbTwPf+h+fHK+UyubrmhsDLwTw=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
