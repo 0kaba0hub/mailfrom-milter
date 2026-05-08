@@ -13,13 +13,13 @@ data:
     import os, sys, ssl, smtplib
     from email.mime.text import MIMEText
 
-    HOST      = os.environ.get("SMTP_HOST", "")
-    PORT      = int(os.environ.get("SMTP_PORT", "587"))
-    PORT25    = int(os.environ.get("SMTP_PORT25", "25"))
-    USER      = os.environ.get("SASL_USER", "")
-    PASSWORD  = os.environ.get("SASL_PASSWORD", "")
-    MAIL_FROM = os.environ.get("MAIL_FROM", "")
-    MAIL_TO   = os.environ.get("MAIL_TO", "")
+    HOST      = os.environ.get("TEST_SMTP_HOST", "")
+    PORT      = int(os.environ.get("TEST_SMTP_PORT", "587"))
+    PORT25    = int(os.environ.get("TEST_SMTP_PORT25", "25"))
+    USER      = os.environ.get("TEST_SASL_USER", "")
+    PASSWORD  = os.environ.get("TEST_SASL_PASSWORD", "")
+    MAIL_FROM = os.environ.get("TEST_MAIL_FROM", "")
+    MAIL_TO   = os.environ.get("TEST_MAIL_TO", "")
 
     if not PASSWORD:
         print("SKIP: credentials secret absent — post-deploy test skipped")

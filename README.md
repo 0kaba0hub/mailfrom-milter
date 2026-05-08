@@ -213,13 +213,13 @@ The Job skips automatically if the credentials secret is absent.
 
 ```sh
 kubectl create secret generic mailfrom-test-creds \
-  --from-literal=SMTP_HOST="relay.relay.svc.cluster.local" \
-  --from-literal=SMTP_PORT="587" \
-  --from-literal=SMTP_PORT25="25" \
-  --from-literal=SASL_USER="noreply@mail.example.com" \
-  --from-literal=SASL_PASSWORD="<smtp-password>" \
-  --from-literal=MAIL_FROM="noreply@mail.example.com" \
-  --from-literal=MAIL_TO="test@mail.example.com" \
+  --from-literal=TEST_SMTP_HOST='relay.relay.svc.cluster.local' \
+  --from-literal=TEST_SMTP_PORT='587' \
+  --from-literal=TEST_SMTP_PORT25='25' \
+  --from-literal=TEST_SASL_USER='noreply@mail.example.com' \
+  --from-literal=TEST_SASL_PASSWORD='<smtp-password>' \
+  --from-literal=TEST_MAIL_FROM='noreply@mail.example.com' \
+  --from-literal=TEST_MAIL_TO='test@mail.example.com' \
   -n <namespace>
 ```
 
