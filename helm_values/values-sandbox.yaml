@@ -12,8 +12,9 @@ milterPort: 10031
 metricsPort: 8081
 
 # reject | discard | quarantine_header | accept
-MF_ACTION: accept
+MF_ACTION: reject
 REJECT_CODE: "421"
+MF_SENDER_ADD: "yes"
 
 logLevel: ""
 

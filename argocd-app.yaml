@@ -16,7 +16,7 @@ spec:
         - ../helm_values/values-sandbox.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: mail
+    namespace: relay
   syncPolicy:
     automated:
       prune: true
