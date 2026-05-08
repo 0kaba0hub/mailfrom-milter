@@ -128,6 +128,7 @@ type milterSession struct {
 	flagCheckAuth     string
 	flagCheckData     string
 	addEnvelopeHeader bool
+	queueID           string
 }
 
 func (s *milterSession) reset() {
@@ -137,6 +138,7 @@ func (s *milterSession) reset() {
 	s.flagCheckAuth = ""
 	s.flagCheckData = ""
 	s.addEnvelopeHeader = false
+	s.queueID = ""
 }
 
 func (s *milterSession) Connect(host string, family string, port uint16, addr net.IP, m *milter.Modifier) (milter.Response, error) {
@@ -210,6 +212,7 @@ func (s *milterSession) Header(name string, value string, m *milter.Modifier) (m
 
 // Headers is called after all message headers are received.
 func (s *milterSession) Headers(h textproto.MIMEHeader, m *milter.Modifier) (milter.Response, error) {
+	s.queueID = m.Macros["i"]
 	switch cfg.action {
 	case actionDunno:
 		return s.handleDunno()
@@ -237,6 +240,7 @@ func (s *milterSession) runChecks() {
 
 func (s *milterSession) logResult(returnCode string) {
 	slog.Info("milter",
+		"queue_id", s.queueID,
 		"envelope_from", s.envelopeFrom,
 		"auth_user", s.authUser,
 		"flag_check_auth", s.flagCheckAuth,
