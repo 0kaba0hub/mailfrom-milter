@@ -88,6 +88,7 @@ Every processed authenticated message produces one JSON log entry:
   "time": "...",
   "level": "INFO",
   "msg": "milter",
+  "queue_id": "AE4F61C005B",
   "envelope_from": "user@attacker.com",
   "auth_user": "user@attacker.com",
   "flag_check_auth": "pass",
@@ -96,6 +97,8 @@ Every processed authenticated message produces one JSON log entry:
   "return_code": "reject"
 }
 ```
+
+`queue_id` matches the Postfix queue ID and can be used to correlate milter log entries with Postfix logs. Empty for messages rejected in the `MAIL FROM` phase (before headers are received).
 
 `return_code` values: `reject`, `discard`, `accept`. (For `quarantine_header`, `return_code` is always `accept`; use the `X-MF-Quarantine` header or `mailfrom_messages_total{action="quarantine"}` metric to detect flagged messages.)
 
