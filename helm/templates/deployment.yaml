@@ -40,6 +40,8 @@ spec:
               value: "{{ .Values.MF_ACTION }}"
             - name: REJECT_CODE
               value: "{{ .Values.REJECT_CODE }}"
+            - name: MF_SENDER_ADD
+              value: "{{ .Values.MF_SENDER_ADD }}"
             {{- if .Values.logLevel }}
             - name: LOG_LEVEL
               value: "{{ .Values.logLevel }}"

@@ -20,6 +20,10 @@ MF_ACTION: reject
 # SMTP reply code for reject action: 421 (temporary) or 550 (permanent)
 REJECT_CODE: "421"
 
+# Set to "yes" to add X-MF-Envelope-From header on accepted authenticated
+# messages (reject and discard actions only)
+MF_SENDER_ADD: "no"
+
 # Set to "debug" to enable verbose per-message logging
 logLevel: ""
 

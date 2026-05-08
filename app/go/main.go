@@ -13,6 +13,8 @@
 //	                (default: reject)
 //	REJECT_CODE   — SMTP reply code for reject action: 421 (temp) or 550 (permanent)
 //	                (default: 421)
+//	MF_SENDER_ADD     — Set to "yes" to add X-MF-Envelope-From header on accepted
+//	                authenticated messages (reject and discard actions only)
 //	LOG_LEVEL     — Set to "debug" for verbose per-message logging
 package main
 
@@ -53,6 +55,7 @@ type config struct {
 	metricsAddr string
 	action      string
 	rejectCode  string
+	mfSender    bool
 }
 
 func loadConfig() config {
@@ -61,6 +64,7 @@ func loadConfig() config {
 		metricsAddr: envOrDefault("METRICS_ADDR", defaultMetricsAddr),
 		action:      strings.ToLower(envOrDefault("MF_ACTION", defaultAction)),
 		rejectCode:  envOrDefault("REJECT_CODE", "421"),
+		mfSender:    strings.ToLower(os.Getenv("MF_SENDER_ADD")) == "yes",
 	}
 	switch cfg.action {
 	case actionReject, actionDiscard, actionQuarantineHeader, actionDunno:
@@ -118,11 +122,12 @@ type milterSession struct {
 	clientAddr string
 
 	// Per-message (reset on each MAIL FROM)
-	envelopeFrom  string
-	authUser      string
-	fromHeader    string
-	flagCheckAuth string
-	flagCheckData string
+	envelopeFrom      string
+	authUser          string
+	fromHeader        string
+	flagCheckAuth     string
+	flagCheckData     string
+	addEnvelopeHeader bool
 }
 
 func (s *milterSession) reset() {
@@ -131,6 +136,7 @@ func (s *milterSession) reset() {
 	s.fromHeader = ""
 	s.flagCheckAuth = ""
 	s.flagCheckData = ""
+	s.addEnvelopeHeader = false
 }
 
 func (s *milterSession) Connect(host string, family string, port uint16, addr net.IP, m *milter.Modifier) (milter.Response, error) {
@@ -275,6 +281,10 @@ func (s *milterSession) handleDiscard() (milter.Response, error) {
 	}
 	s.logResult(actionDunno)
 	recordMessage("accept", s.flagCheckAuth, s.flagCheckData)
+	if cfg.mfSender {
+		s.addEnvelopeHeader = true
+		return milter.RespContinue, nil
+	}
 	return milter.RespAccept, nil
 }
 
@@ -287,6 +297,10 @@ func (s *milterSession) handleReject() (milter.Response, error) {
 	}
 	s.logResult(actionDunno)
 	recordMessage("accept", s.flagCheckAuth, s.flagCheckData)
+	if cfg.mfSender {
+		s.addEnvelopeHeader = true
+		return milter.RespContinue, nil
+	}
 	return milter.RespAccept, nil
 }
 
@@ -307,6 +321,11 @@ func (s *milterSession) Body(m *milter.Modifier) (milter.Response, error) {
 			metricAction = "quarantine"
 		}
 		recordMessage(metricAction, s.flagCheckAuth, s.flagCheckData)
+	}
+	if s.addEnvelopeHeader {
+		if err := m.AddHeader(headerEnvelopeFrom, s.envelopeFrom); err != nil {
+			slog.Error("failed to add "+headerEnvelopeFrom, "err", err)
+		}
 	}
 	return milter.RespAccept, nil
 }
@@ -359,6 +378,7 @@ func main() {
 		"listen", cfg.listenAddr,
 		"metrics", cfg.metricsAddr,
 		"action", cfg.action,
+		"mf_sender", cfg.mfSender,
 	)
 
 	server := &milter.Server{
