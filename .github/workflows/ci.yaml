@@ -152,6 +152,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Generate release notes
+        if: steps.version.outputs.is_release == 'true'
+        uses: orhun/git-cliff-action@v4
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --unreleased --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
       - name: Create git tag and GitHub Release
         if: steps.version.outputs.is_release == 'true'
         env:
@@ -161,7 +171,7 @@ jobs:
           git push origin "${{ steps.version.outputs.tag }}"
           gh release create "${{ steps.version.outputs.tag }}" \
             --title "${{ steps.version.outputs.tag }}" \
-            --generate-notes
+            --notes-file RELEASE_NOTES.md
 
       - name: Update image tag in values
         run: |
