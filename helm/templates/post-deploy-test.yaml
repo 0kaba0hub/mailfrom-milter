@@ -1,0 +1,137 @@
+{{- if .Values.postDeployTest.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mailfrom-test-script
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation
+data:
+  test.py: |
+    #!/usr/bin/env python3
+    import os, sys, ssl, smtplib
+    from email.mime.text import MIMEText
+
+    HOST      = os.environ.get("TEST_SMTP_HOST", "")
+    PORT      = int(os.environ.get("TEST_SMTP_PORT", "587"))
+    PORT25    = int(os.environ.get("TEST_SMTP_PORT25", "25"))
+    USER      = os.environ.get("TEST_SASL_USER", "")
+    PASSWORD  = os.environ.get("TEST_SASL_PASSWORD", "")
+    MAIL_FROM = os.environ.get("TEST_MAIL_FROM", "")
+    MAIL_TO   = os.environ.get("TEST_MAIL_TO", "")
+
+    if not PASSWORD:
+        print("SKIP: credentials secret absent — post-deploy test skipped")
+        sys.exit(0)
+
+    DOMAIN       = USER.split("@")[1] if "@" in USER else "example.com"
+    OTHER_DOMAIN = "invalid-other-test.example"
+
+    def msg(from_addr, subject):
+        m = MIMEText("mailfrom-milter post-deploy test")
+        m["From"] = from_addr
+        m["To"]   = MAIL_TO
+        m["Subject"] = subject
+        return m.as_string()
+
+    def smtp_auth():
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        s = smtplib.SMTP(HOST, PORT, timeout=10)
+        s.starttls(context=ctx)
+        s.login(USER, PASSWORD)
+        return s
+
+    results = []
+
+    def run(name, want_ok, fn):
+        try:
+            fn()
+            ok = want_ok
+        except (smtplib.SMTPSenderRefused,
+                smtplib.SMTPDataError,
+                smtplib.SMTPResponseException) as e:
+            ok = not want_ok
+            print(f"  smtp error {e.smtp_code}: {e.smtp_error}")
+        except ConnectionRefusedError:
+            print(f"[SKIP] {name}: connection refused")
+            return
+        except Exception as e:
+            print(f"[FAIL] {name}: {e}")
+            results.append(False)
+            return
+        status = "PASS" if ok else "FAIL"
+        print(f"[{status}] {name}")
+        results.append(ok)
+
+    # case 1: no auth (port 25, mynetworks) → accept
+    def case1():
+        s = smtplib.SMTP(HOST, PORT25, timeout=10)
+        s.ehlo()
+        s.sendmail(MAIL_FROM, [MAIL_TO], msg(MAIL_FROM, "test-1-no-auth"))
+        s.quit()
+
+    run("case1: no auth → accept", True, case1)
+
+    # case 2: auth user domain ≠ MAIL FROM domain → reject MFC010001
+    def case2():
+        with smtp_auth() as s:
+            bad_from = f"noreply@{OTHER_DOMAIN}"
+            s.sendmail(bad_from, [MAIL_TO], msg(bad_from, "test-2-auth-mismatch"))
+
+    run("case2: auth domain ≠ envelope → reject", False, case2)
+
+    # case 3: envelope ok, From header domain differs → reject MFC010002
+    def case3():
+        with smtp_auth() as s:
+            s.sendmail(MAIL_FROM, [MAIL_TO],
+                       msg(f"ceo@{OTHER_DOMAIN}", "test-3-from-header-mismatch"))
+
+    run("case3: From header domain ≠ envelope → reject", False, case3)
+
+    # case 4: all domains match → accept
+    def case4():
+        with smtp_auth() as s:
+            s.sendmail(MAIL_FROM, [MAIL_TO], msg(MAIL_FROM, "test-4-all-match"))
+
+    run("case4: all domains match → accept", True, case4)
+
+    if not results:
+        print("SKIP: no tests ran")
+        sys.exit(0)
+
+    failed = results.count(False)
+    print(f"\nRESULT: {len(results) - failed}/{len(results)} passed")
+    sys.exit(1 if failed else 0)
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mailfrom-post-deploy-test
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: test
+          image: python:3.13-alpine
+          command: ["python", "/scripts/test.py"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.postDeployTest.credentialsSecret }}
+                optional: true
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: mailfrom-test-script
+{{- end }}

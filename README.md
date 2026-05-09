@@ -196,6 +196,49 @@ argocd-app.yaml
 
 ---
 
+## Post-deploy smoke test
+
+A Helm post-install/post-upgrade hook Job that verifies all four milter cases after every deployment.
+
+| Case | Auth | MAIL FROM | From: header | Expected |
+|:---|:---|:---|:---|:---|
+| 1 | none | own domain | own domain | accept (skip) |
+| 2 | yes | **other** domain | — | reject MFC010001 |
+| 3 | yes | own domain | **other** domain | reject MFC010002 |
+| 4 | yes | own domain | own domain | accept |
+
+The Job skips automatically if the credentials secret is absent.
+
+**Setup (one-time, outside Helm):**
+
+```sh
+kubectl create secret generic mailfrom-test-creds \
+  --from-literal=TEST_SMTP_HOST='relay.relay.svc.cluster.local' \
+  --from-literal=TEST_SMTP_PORT='587' \
+  --from-literal=TEST_SMTP_PORT25='25' \
+  --from-literal=TEST_SASL_USER='noreply@mail.example.com' \
+  --from-literal=TEST_SASL_PASSWORD='<smtp-password>' \
+  --from-literal=TEST_MAIL_FROM='noreply@mail.example.com' \
+  --from-literal=TEST_MAIL_TO='test@mail.example.com' \
+  -n <namespace>
+```
+
+**Enable in values:**
+
+```yaml
+postDeployTest:
+  enabled: true
+  credentialsSecret: "mailfrom-test-creds"
+```
+
+**Check results:**
+
+```sh
+kubectl logs -l job-name=mailfrom-post-deploy-test -n <namespace>
+```
+
+---
+
 ## Deploy
 
 ### Kubernetes (ArgoCD)

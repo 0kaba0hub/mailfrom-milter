@@ -36,3 +36,13 @@ resources:
     memory: 64Mi
 
 nodeSelector: {}
+
+# Post-deployment smoke test (Helm post-install/post-upgrade hook Job).
+# The Job skips automatically if the credentials secret is absent.
+#
+# Create the secret once (outside Helm):
+#   kubectl create secret generic mailfrom-test-creds \
+#     --from-literal=password='<smtp-password>' -n <namespace>
+postDeployTest:
+  enabled: false
+  credentialsSecret: "mailfrom-test-creds"  # all params loaded from this secret
