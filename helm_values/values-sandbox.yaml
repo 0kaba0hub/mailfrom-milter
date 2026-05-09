@@ -27,3 +27,7 @@ resources:
     memory: 64Mi
 
 nodeSelector: {}
+
+postDeployTest:
+  enabled: true
+  credentialsSecret: "mailfrom-test-creds"
