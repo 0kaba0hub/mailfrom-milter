@@ -30,4 +30,4 @@ nodeSelector: {}
 
 postDeployTest:
   enabled: true
-  credentialsSecret: "mailfrom-test-creds"
+  credentialsSecret: "relay-mailfrom-creds"
