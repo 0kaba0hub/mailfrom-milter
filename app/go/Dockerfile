@@ -11,8 +11,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 FROM alpine:3.24
 
-# hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates
+# hadolint ignore=DL3018,DL3019
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 
 WORKDIR /app
 
