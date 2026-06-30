@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/0kaba0hub/mailfrom-milter
-  tag: "06c56d6"
+  tag: "29b32b4"
   pullPolicy: Always
 
 imagePullSecrets:
