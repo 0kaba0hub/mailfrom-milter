@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/0kaba0hub/mailfrom-milter.git
+    repoURL: https://github.com/yarilomail/mailfrom-milter.git
     targetRevision: HEAD
     path: helm
     helm:
