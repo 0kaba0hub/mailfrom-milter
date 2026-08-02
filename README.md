@@ -169,7 +169,7 @@ rate(mailfrom_messages_total{action="reject"}[5m])
 - [`0kaba0hub/go-milter`](https://github.com/0kaba0hub/go-milter) v0.5.0 — fork of `emersion/go-milter` with `slog` logging and `sync.Pool` write buffer (module renamed to `github.com/0kaba0hub/go-milter`)
 - [`0kaba0hub/go-message`](https://github.com/0kaba0hub/go-message) v0.19.0 — fork of `emersion/go-message` (indirect dep of go-milter, module renamed to `github.com/0kaba0hub/go-message`)
 - Both forks have weekly upstream release monitors
-- Alpine 3.21 runtime image
+- Alpine 3.24 runtime image
 
 ---
 
