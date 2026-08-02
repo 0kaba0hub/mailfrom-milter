@@ -1,17 +1,17 @@
 # mailfrom-milter
 
 <table><tr>
-<td><img src="https://raw.githubusercontent.com/0kaba0hub/mailfrom-milter/main/doc/dockerhub-icon.svg" width="110" alt="mailfrom-milter logo"/></td>
+<td><img src="https://raw.githubusercontent.com/yarilomail/mailfrom-milter/main/doc/dockerhub-icon.svg" width="110" alt="mailfrom-milter logo"/></td>
 <td>
 
 Postfix **milter** written in Go that enforces alignment between the SMTP envelope sender (`MAIL FROM`) and the `From:` message header.
 
 Licensed under **AGPLv3** — see [LICENSE](LICENSE).
 
-[![CI](https://github.com/0kaba0hub/mailfrom-milter/actions/workflows/ci.yaml/badge.svg)](https://github.com/0kaba0hub/mailfrom-milter/actions/workflows/ci.yaml)
+[![CI](https://github.com/yarilomail/mailfrom-milter/actions/workflows/ci.yaml/badge.svg)](https://github.com/yarilomail/mailfrom-milter/actions/workflows/ci.yaml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 [![Go version](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](app/go/go.mod)
-[![Container](https://img.shields.io/badge/ghcr.io-mailfrom--milter-blue?logo=github)](https://github.com/0kaba0hub/mailfrom-milter/pkgs/container/mailfrom-milter)
+[![Container](https://img.shields.io/badge/ghcr.io-mailfrom--milter-blue?logo=github)](https://github.com/yarilomail/mailfrom-milter/pkgs/container/mailfrom-milter)
 [![Docker Hub](https://img.shields.io/docker/pulls/0kaba0/mailfrom-milter?logo=docker&logoColor=white)](https://hub.docker.com/r/0kaba0/mailfrom-milter)
 
 </td>
@@ -19,7 +19,7 @@ Licensed under **AGPLv3** — see [LICENSE](LICENSE).
 
 ## Architecture
 
-![Architecture](https://raw.githubusercontent.com/0kaba0hub/mailfrom-milter/main/doc/arch-mailfrom.svg)
+![Architecture](https://raw.githubusercontent.com/yarilomail/mailfrom-milter/main/doc/arch-mailfrom.svg)
 
 ---
 
