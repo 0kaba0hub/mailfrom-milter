@@ -4,7 +4,7 @@ image:
   pullPolicy: Always
 
 imagePullSecrets:
-  - name: ghcr-pull-secret
+  - name: ghcr2-pull-secret
 
 replicaCount: 1
 
